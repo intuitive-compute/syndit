@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package syndit.registry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service Registry {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc Deregister(DeregisterRequest) returns (DeregisterResponse);
+}
+
+message AgentRecord {
+  string agent_id = 1;
+  string user_id = 2;
+  bytes public_key = 3;
+  string endpoint = 4;
+  repeated string transports = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message RegisterRequest {
+  AgentRecord record = 1;
+}
+
+message RegisterResponse {
+  google.protobuf.Timestamp registered_at = 1;
+}
+
+message ResolveRequest {
+  string agent_id = 1;
+}
+
+message ResolveResponse {
+  AgentRecord record = 1;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated AgentRecord records = 1;
+}
+
+message DeregisterRequest {
+  string agent_id = 1;
+}
+
+message DeregisterResponse {}

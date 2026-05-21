@@ -1,0 +1,25 @@
+use clap::Parser;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+
+#[derive(Parser, Debug, Clone)]
+#[command(name = "agent-runtime", about = "Local agent runtime for the syndit prototype")]
+pub struct Args {
+    #[arg(long, env = "AGENT_ID")]
+    pub agent_id: String,
+
+    #[arg(long, env = "AGENT_USER_ID")]
+    pub user_id: String,
+
+    #[arg(long, env = "REGISTRY_URL", default_value = "http://127.0.0.1:50050")]
+    pub registry_url: String,
+
+    #[arg(long, env = "AGENT_BIND", default_value = "127.0.0.1:0")]
+    pub bind: SocketAddr,
+
+    #[arg(long, env = "AGENT_ADVERTISE", default_value = "localhost")]
+    pub advertise: String,
+
+    #[arg(long, env = "AGENT_KEY_PATH")]
+    pub key_path: Option<PathBuf>,
+}
