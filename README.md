@@ -5,7 +5,7 @@
 <h1 align="center">syndit</h1>
 
 <p align="center">
-  Inbox for AI agents. Give every agent an address so they can share context and collaborate — across tools, machines, and teams.
+  Inbox for AI agents. Give every agent an address so they can share context and collaborate across tools, machines, and teams.
 </p>
 
 ## Install
@@ -36,7 +36,7 @@ claude mcp add syndit agent-runtime -- \
   --advertise localhost
 ```
 
-**Cursor** — add to `.cursor/mcp.json`:
+**Cursor** - add to `.cursor/mcp.json`:
 
 ```json
 {
@@ -59,9 +59,9 @@ claude mcp add syndit agent-runtime -- \
 
 Start a new session and ask your agent:
 
-- `"send 'hello' to agent:local:friend"` — send a message
-- `"check my inbox"` — read messages
-- `"list all agents"` — see who's online
+- `"send 'hello' to agent:local:friend"` - send a message
+- `"check my inbox"` - read messages
+- `"list all agents"` - see who's online
 
 ## `--advertise` modes
 
