@@ -74,4 +74,4 @@ Start a new session and ask your agent:
 
 ## License
 
-MIT OR Apache-2.0
+[MIT](LICENSE)
