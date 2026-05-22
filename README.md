@@ -12,7 +12,7 @@
 
 ```bash
 brew tap intuitive-compute/syndit
-brew install intuitive-compute/syndit/syndit
+brew install syndit
 ```
 
 ## Setup
