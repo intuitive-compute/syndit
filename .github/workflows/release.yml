@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binaries
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin syndit --bin agent-runtime
+
+      - name: Package tarball
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="syndit-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/syndit" "dist/$name/"
+          cp "target/${{ matrix.target }}/release/agent-runtime" "dist/$name/"
+          cp README.md "dist/$name/" 2>/dev/null || true
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - name: Package zip
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="syndit-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/syndit.exe" "dist/$name/"
+          cp "target/${{ matrix.target }}/release/agent-runtime.exe" "dist/$name/"
+          cp README.md "dist/$name/" 2>/dev/null || true
+          7z a "dist/$name.zip" "./dist/$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/syndit-*
+          if-no-files-found: error
+
+  release:
+    name: Publish release & bump tap
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/syndit-*.tar.gz
+            dist/syndit-*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      - name: Compute SHA256 for binary tarballs
+        id: shas
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu; do
+            file="dist/syndit-v${version}-${target}.tar.gz"
+            sha=$(sha256sum "$file" | awk '{print $1}')
+            key=$(echo "$target" | tr '-' '_')
+            echo "${key}=${sha}" >> "$GITHUB_OUTPUT"
+          done
+          src_sha=$(curl -fsSL "https://github.com/intuitive-compute/syndit/archive/refs/tags/v${version}.tar.gz" | sha256sum | awk '{print $1}')
+          echo "source=$src_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: intuitive-compute/homebrew-syndit
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Regenerate formula
+        shell: bash
+        env:
+          VERSION: ${{ steps.shas.outputs.version }}
+          SHA_ARM_MAC: ${{ steps.shas.outputs.aarch64_apple_darwin }}
+          SHA_INTEL_MAC: ${{ steps.shas.outputs.x86_64_apple_darwin }}
+          SHA_LINUX: ${{ steps.shas.outputs.x86_64_unknown_linux_gnu }}
+          SHA_SOURCE: ${{ steps.shas.outputs.source }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/intuitive-compute/syndit/releases/download/v${VERSION}"
+          cat > tap/Formula/syndit.rb <<RUBY
+          class Syndit < Formula
+            desc "CLI and MCP runtime for the syndit agent protocol"
+            homepage "https://github.com/intuitive-compute/syndit"
+            version "${VERSION}"
+            license "MIT OR Apache-2.0"
+            head "https://github.com/intuitive-compute/syndit.git", branch: "main"
+
+            # Source fallback for archs without a prebuilt binary.
+            url "https://github.com/intuitive-compute/syndit/archive/refs/tags/v${VERSION}.tar.gz"
+            sha256 "${SHA_SOURCE}"
+
+            on_macos do
+              on_arm do
+                url "${base}/syndit-v${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${SHA_ARM_MAC}"
+              end
+              on_intel do
+                url "${base}/syndit-v${VERSION}-x86_64-apple-darwin.tar.gz"
+                sha256 "${SHA_INTEL_MAC}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "${base}/syndit-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX}"
+              end
+              on_arm do
+                depends_on "rust" => :build
+                depends_on "protobuf" => :build
+              end
+            end
+
+            def install
+              if File.exist?("Cargo.toml")
+                system "cargo", "install", "--locked", "--root", prefix, "--path", "crates/syndit-cli"
+                system "cargo", "install", "--locked", "--root", prefix, "--path", "crates/agent-runtime"
+              else
+                bin.install "syndit", "agent-runtime"
+              end
+            end
+
+            test do
+              assert_match "syndit", shell_output("#{bin}/syndit --version")
+            end
+          end
+          RUBY
+
+      - name: Commit and push formula bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tap
+          if git diff --quiet Formula/syndit.rb; then
+            echo "Formula unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "syndit-release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add Formula/syndit.rb
+          git commit -m "syndit ${{ steps.shas.outputs.version }}"
+          git push
