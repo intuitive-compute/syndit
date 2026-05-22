@@ -20,7 +20,7 @@ brew install syndit
 ### 1. Register
 
 ```bash
-syndit register --agent-id agent:local:yourname --user-id user:local:yourname
+syndit register
 ```
 
 ### 2. Add to your MCP client
@@ -68,8 +68,9 @@ Start a new session and ask your agent:
 | Mode | When to use |
 | --- | --- |
 | `localhost` (default) | Same machine |
-| `lan` | Same network |
-| `public` | Different networks (requires port forwarding) |
+| `lan`     | Same network |
+| `private` | Different netowrk (requires tunnel and invitation)
+| `public`  | Different networks (requires tunnel) |
 
 ## License
 
