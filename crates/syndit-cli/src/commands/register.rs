@@ -3,41 +3,30 @@ use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use clap::Args;
 
 use agent_core::identity::KeyStore;
-use crate::client::{RegistryClient, UserRecordDto};
 use crate::config::{self, UserConfig};
 use crate::util::random_hex;
 
 #[derive(Args, Debug)]
-#[command(about = "Register a new user identity")]
+#[command(about = "Create a local user identity")]
 pub struct RegisterArgs {
-    /// User type: local (default), private, or public
-    #[arg(long, default_value = "local")]
-    pub r#type: String,
-
-    /// Open the browser to register a pro (custom) username
+    /// Regenerate the identity even if one is already registered.
     #[arg(long)]
-    pub pro: bool,
-
-    #[arg(long, env = "REGISTRY_URL", default_value = "https://syndit-registry-http-890654671103.us-west1.run.app")]
-    pub registry_url: String,
+    pub force: bool,
 }
 
 pub async fn run(args: RegisterArgs) -> Result<()> {
-    if args.pro {
-        let url = "https://syndit.sh";
-        println!("Opening {url} to register a pro username...");
-        open::that(url).context("failed to open browser")?;
-        return Ok(());
+    if !args.force {
+        if let Ok(existing) = config::load() {
+            println!("Already registered:");
+            println!("  User ID:   {}", existing.user_id);
+            println!("  Key file:  {}", existing.key_path);
+            println!();
+            println!("Pass --force to regenerate, or run `syndit agent create claude` to wire up an agent.");
+            return Ok(());
+        }
     }
 
-    let user_type = args.r#type.to_lowercase();
-    match user_type.as_str() {
-        "local" | "private" | "public" => {}
-        _ => anyhow::bail!("invalid user type '{}', expected: local, private, or public", user_type),
-    }
-
-    let rand_suffix = random_hex(3);
-    let user_id = format!("user:{user_type}:{rand_suffix}");
+    let user_id = format!("user:{}", random_hex(3));
 
     let key_path = KeyStore::default_key_path(&user_id)
         .context("failed to determine key path")?;
@@ -45,29 +34,18 @@ pub async fn run(args: RegisterArgs) -> Result<()> {
         .context("failed to generate key")?;
     let pub_b64 = B64.encode(key.verifying_key().as_bytes());
 
-    if user_type == "public" {
-        let client = RegistryClient::new(&args.registry_url);
-        let dto = UserRecordDto {
-            user_id: user_id.clone(),
-            public_key: pub_b64.clone(),
-            created_at: None,
-        };
-        client.create_user(&dto).await?;
-    }
-
     let cfg = UserConfig {
         user_id: user_id.clone(),
         key_path: key_path.display().to_string(),
     };
     config::save(&cfg)?;
 
-    println!("Registered user:");
+    println!("Registered:");
     println!("  User ID:     {user_id}");
     println!("  Public key:  {pub_b64}");
     println!("  Key file:    {}", key_path.display());
-    if user_type == "local" || user_type == "private" {
-        println!("  (local only - not registered with the public registry)");
-    }
+    println!();
+    println!("Next: `syndit agent create claude` to wire up an agent.");
 
     Ok(())
 }
