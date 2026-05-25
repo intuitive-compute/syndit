@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::mailbox::Mailbox;
@@ -22,11 +21,10 @@ pub struct McpState {
     pub agent_id: String,
     pub user_id: String,
     pub endpoint: String,
-    pub registry_url: String,
     pub registered_at: chrono::DateTime<chrono::Utc>,
     pub identity: Arc<AgentIdentity>,
     pub mailbox: Mailbox,
-    pub registry: Arc<Mutex<RegistryHandle>>,
+    pub registry: RegistryHandle,
     pub peers: PeerClient,
 }
 
@@ -181,7 +179,7 @@ async fn tool_status(state: &McpState) -> Result<Value, String> {
         "agent_id": state.agent_id,
         "user_id": state.user_id,
         "endpoint": state.endpoint,
-        "registry_url": state.registry_url,
+        "registry_url": state.registry.base_url(),
         "registered_at": state.registered_at.to_rfc3339(),
         "public_key_b64": base64::engine::general_purpose::STANDARD
             .encode(state.identity.verifying_key().to_bytes())
@@ -189,10 +187,7 @@ async fn tool_status(state: &McpState) -> Result<Value, String> {
 }
 
 async fn tool_list(state: &McpState) -> Result<Value, String> {
-    let peers = {
-        let mut reg = state.registry.lock().await;
-        reg.list().await.map_err(|e| e.to_string())?
-    };
+    let peers = state.registry.list().await.map_err(|e| e.to_string())?;
     Ok(json!({"agents": peers}))
 }
 
@@ -212,10 +207,7 @@ async fn tool_send(state: &McpState, args: Value) -> Result<Value, String> {
         None => Uuid::new_v4(),
     };
 
-    let peer = {
-        let mut reg = state.registry.lock().await;
-        reg.resolve(&args.to).await.map_err(|e| e.to_string())?
-    };
+    let peer = state.registry.resolve(&args.to).await.map_err(|e| e.to_string())?;
 
     let unsigned = UnsignedEnvelope::build(
         &state.agent_id,

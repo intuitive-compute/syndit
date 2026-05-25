@@ -11,9 +11,6 @@ path = "src/main.rs"
 [dependencies]
 agent-core = { path = "../agent-core" }
 tokio.workspace = true
-tonic.workspace = true
-prost.workspace = true
-prost-types.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 clap.workspace = true
@@ -29,6 +26,3 @@ uuid.workspace = true
 if-addrs.workspace = true
 ed25519-dalek.workspace = true
 async-trait.workspace = true
-
-[build-dependencies]
-tonic-build.workspace = true

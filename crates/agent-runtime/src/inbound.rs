@@ -8,8 +8,6 @@ use axum::{
 };
 use chrono::Utc;
 use serde::Serialize;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::mailbox::Mailbox;
 use crate::registry_client::RegistryHandle;
@@ -18,7 +16,7 @@ use crate::registry_client::RegistryHandle;
 pub struct InboundState {
     pub agent_id: String,
     pub mailbox: Mailbox,
-    pub registry: Arc<Mutex<RegistryHandle>>,
+    pub registry: RegistryHandle,
 }
 
 #[derive(Serialize)]
@@ -65,12 +63,9 @@ async fn receive(
         );
     }
 
-    let peer = {
-        let mut reg = state.registry.lock().await;
-        match reg.resolve(&envelope.sender_agent_id).await {
-            Ok(p) => p,
-            Err(e) => return reject(StatusCode::UNAUTHORIZED, format!("resolve sender: {e}")),
-        }
+    let peer = match state.registry.resolve(&envelope.sender_agent_id).await {
+        Ok(p) => p,
+        Err(e) => return reject(StatusCode::UNAUTHORIZED, format!("resolve sender: {e}")),
     };
 
     if let Err(e) = signing::verify(&envelope, &peer.public_key) {

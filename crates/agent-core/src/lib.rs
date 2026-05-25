@@ -1,5 +1,6 @@
 pub mod envelope;
 pub mod identity;
+pub mod registry_sig;
 pub mod signing;
 
 pub use envelope::{Envelope, EnvelopeError, MessagePayload, UnsignedEnvelope};

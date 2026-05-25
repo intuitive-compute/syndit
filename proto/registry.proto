@@ -22,6 +22,8 @@ message AgentRecord {
 
 message RegisterRequest {
   AgentRecord record = 1;
+  bytes signature = 2;     // raw 64-byte ed25519 signature over canonical agent.register bytes
+  string issued_at = 3;    // RFC3339; server rejects ±300s outside its clock
 }
 
 message RegisterResponse {
@@ -44,6 +46,8 @@ message ListResponse {
 
 message DeregisterRequest {
   string agent_id = 1;
+  bytes signature = 2;     // raw 64-byte ed25519 signature over canonical agent.deregister bytes
+  string issued_at = 3;    // RFC3339; server rejects ±300s outside its clock
 }
 
 message DeregisterResponse {}

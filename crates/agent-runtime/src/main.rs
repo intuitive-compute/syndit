@@ -4,7 +4,6 @@ use clap::Parser;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
 mod config;
@@ -22,10 +21,6 @@ use mcp::McpState;
 use peer_client::PeerClient;
 use registry_client::RegistryHandle;
 use tunnel::{Tunnel, TunnelOptions};
-
-pub mod proto {
-    tonic::include_proto!("syndit.registry.v1");
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -56,6 +51,23 @@ async fn main() -> anyhow::Result<()> {
         "loaded identity"
     );
 
+    let user_key_path: PathBuf = match args.user_key_path.clone() {
+        Some(p) => p,
+        None => KeyStore::default_key_path(&args.user_id)
+            .context("could not determine default user key path; pass --user-key-path")?,
+    };
+    let user_signing_key = KeyStore::load(&user_key_path).with_context(|| {
+        format!(
+            "loading user key at {} (run `syndit register` to create one)",
+            user_key_path.display()
+        )
+    })?;
+    tracing::info!(
+        user_id = %args.user_id,
+        user_key_path = %user_key_path.display(),
+        "loaded user signing key"
+    );
+
     let bind: SocketAddr = args.bind;
     let listener = tokio::net::TcpListener::bind(bind).await?;
     let local_addr = listener.local_addr()?;
@@ -74,19 +86,24 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(%local_addr, %endpoint, "inbound listener ready");
 
     let mailbox = Mailbox::new();
-    let registry = RegistryHandle::connect(args.registry_url.clone()).await?;
-    let registry = Arc::new(Mutex::new(registry));
+    let registry = RegistryHandle::new(args.registry_url.clone());
 
-    {
-        let mut reg = registry.lock().await;
-        reg.register(
+    registry
+        .ensure_user_record(&args.user_id, &user_signing_key)
+        .await
+        .with_context(|| format!("ensure_user_record for {}", args.user_id))?;
+    tracing::info!(user_id = %args.user_id, "user record present in registry");
+
+    registry
+        .register_agent(
             &identity.agent_id,
             &args.user_id,
             &identity.verifying_key(),
             &endpoint,
+            &user_signing_key,
         )
-        .await?;
-    }
+        .await
+        .with_context(|| format!("register_agent for {}", identity.agent_id))?;
     let registered_at = chrono::Utc::now();
     tracing::info!(%endpoint, "registered with registry");
 
@@ -107,7 +124,6 @@ async fn main() -> anyhow::Result<()> {
         agent_id: identity.agent_id.clone(),
         user_id: args.user_id.clone(),
         endpoint: endpoint.clone(),
-        registry_url: args.registry_url.clone(),
         registered_at,
         identity: identity.clone(),
         mailbox: mailbox.clone(),

@@ -8,7 +8,7 @@ use crate::util::random_hex;
 
 const PRO_URL: &str = "https://syndit.sh";
 const DEFAULT_REGISTRY_URL: &str =
-    "https://syndit-registry-grpc-890654671103.us-west1.run.app";
+    "https://syndit-registry-http-890654671103.us-west1.run.app";
 const POSTURES: &[&str] = &["local", "lan", "private", "public"];
 
 #[derive(Subcommand, Debug)]
@@ -187,6 +187,8 @@ fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Vec<String>> {
         agent_id.clone(),
         "--user-id".into(),
         user_cfg.user_id.clone(),
+        "--user-key-path".into(),
+        user_cfg.key_path.clone(),
         "--registry-url".into(),
         args.registry_url.clone(),
         "--bind".into(),
