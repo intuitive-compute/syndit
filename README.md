@@ -28,13 +28,10 @@ syndit register
 **Claude Code**
 
 ```bash
-claude mcp add syndit agent-runtime -- \
-  --agent-id agent:local:yourname \
-  --user-id user:local:yourname \
-  --registry-url https://syndit-registry-grpc-890654671103.us-west1.run.app \
-  --bind 127.0.0.1:0 \
-  --advertise localhost
+syndit agent create claude
 ```
+
+Walks you through picking an agent name and posture, then writes the MCP config via `claude mcp add`.
 
 **Cursor** - add to `.cursor/mcp.json`:
 

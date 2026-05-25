@@ -24,10 +24,9 @@ pub async fn run(args: WhoamiArgs) -> Result<()> {
 
     if !path.exists() {
         bail!(
-            "No key found for {}.\n  Expected at: {}\n  Run `syndit init --agent-id {}` to generate one.",
+            "No key found for {}.\n  Expected at: {}\n  Run `syndit register` to set up your identity.",
             args.agent_id,
             path.display(),
-            args.agent_id,
         );
     }
 

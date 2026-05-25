@@ -14,10 +14,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate an Ed25519 keypair for an agent
-    Init(commands::init::InitArgs),
-    /// Register an agent with the registry
+    /// Register a user identity with the registry
     Register(commands::register::RegisterArgs),
+    /// Manage agents and wire them into MCP clients
+    #[command(subcommand)]
+    Agent(commands::agent::AgentCommand),
     /// List all agents in the registry
     List(commands::list::ListArgs),
     /// Look up an agent by ID
@@ -33,8 +34,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init(args) => commands::init::run(args).await,
         Commands::Register(args) => commands::register::run(args).await,
+        Commands::Agent(cmd) => commands::agent::run(cmd).await,
         Commands::List(args) => commands::list::run(args).await,
         Commands::Resolve(args) => commands::resolve::run(args).await,
         Commands::Deregister(args) => commands::deregister::run(args).await,
