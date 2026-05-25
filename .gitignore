@@ -4,3 +4,4 @@ Cargo.lock.bak
 .DS_Store
 .env
 .env.local
+.claude/worktrees/
