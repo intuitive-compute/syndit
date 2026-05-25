@@ -20,4 +20,5 @@ base64.workspace = true
 ed25519-dalek.workspace = true
 rand_core.workspace = true
 dirs.workspace = true
+dialoguer.workspace = true
 open = "5"

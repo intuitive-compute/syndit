@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod deregister;
 pub mod init;
 pub mod list;
