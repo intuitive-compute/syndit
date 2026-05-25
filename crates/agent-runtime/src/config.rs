@@ -22,4 +22,10 @@ pub struct Args {
 
     #[arg(long, env = "AGENT_KEY_PATH")]
     pub key_path: Option<PathBuf>,
+
+    #[arg(long, env = "CLOUDFLARE_TUNNEL_HOSTNAME")]
+    pub tunnel_hostname: Option<String>,
+
+    #[arg(long, env = "CLOUDFLARE_TUNNEL_TOKEN")]
+    pub tunnel_token: Option<String>,
 }

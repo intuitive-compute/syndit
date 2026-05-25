@@ -13,6 +13,7 @@ mod mailbox;
 mod mcp;
 mod peer_client;
 mod registry_client;
+mod tunnel;
 
 use config::Args;
 use inbound::InboundState;
@@ -20,6 +21,7 @@ use mailbox::Mailbox;
 use mcp::McpState;
 use peer_client::PeerClient;
 use registry_client::RegistryHandle;
+use tunnel::{Tunnel, TunnelOptions};
 
 pub mod proto {
     tonic::include_proto!("syndit.registry.v1");
@@ -57,7 +59,22 @@ async fn main() -> anyhow::Result<()> {
     let bind: SocketAddr = args.bind;
     let listener = tokio::net::TcpListener::bind(bind).await?;
     let local_addr = listener.local_addr()?;
-    let endpoint = resolve_advertise(&args.advertise, local_addr).await?;
+
+    let _tunnel: Option<Tunnel>;
+    let endpoint = if args.advertise == "tunnel" {
+        let t = Tunnel::spawn(TunnelOptions {
+            local_port: local_addr.port(),
+            hostname: args.tunnel_hostname.as_deref(),
+            token: args.tunnel_token.as_deref(),
+        })
+        .await?;
+        let url = t.url.clone();
+        _tunnel = Some(t);
+        url
+    } else {
+        _tunnel = None;
+        resolve_advertise(&args.advertise, local_addr).await?
+    };
     tracing::info!(%local_addr, %endpoint, "inbound listener ready");
 
     let mailbox = Mailbox::new();
