@@ -31,7 +31,7 @@ struct InfoBody {
     agent_id: String,
 }
 
-const MAX_BODY_BYTES: usize = 64 * 1024;
+const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 pub fn router(state: InboundState) -> Router {
     Router::new()
