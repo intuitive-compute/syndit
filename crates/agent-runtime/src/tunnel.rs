@@ -54,7 +54,11 @@ async fn spawn_quick(port: u16) -> anyhow::Result<Tunnel> {
 }
 
 async fn spawn_named(port: u16, token: &str, hostname: &str) -> anyhow::Result<Tunnel> {
-    let child = build_command(&["tunnel", "--no-autoupdate", "run", "--token", token])?;
+    let mut child = build_command(&["tunnel", "--no-autoupdate", "run", "--token", token])?;
+
+    if let Some(stderr) = child.stderr.take() {
+        tokio::spawn(forward_to_tracing(stderr));
+    }
 
     let url = if hostname.starts_with("http://") || hostname.starts_with("https://") {
         hostname.to_string()
@@ -67,6 +71,13 @@ async fn spawn_named(port: u16, token: &str, hostname: &str) -> anyhow::Result<T
         "cloudflared named tunnel starting (ingress is configured in the Cloudflare dashboard)"
     );
     Ok(Tunnel { url, _child: child })
+}
+
+async fn forward_to_tracing<R: tokio::io::AsyncRead + Unpin>(stream: R) {
+    let mut reader = BufReader::new(stream).lines();
+    while let Ok(Some(line)) = reader.next_line().await {
+        tracing::debug!(target: "cloudflared", "{line}");
+    }
 }
 
 fn build_command(args: &[&str]) -> anyhow::Result<Child> {

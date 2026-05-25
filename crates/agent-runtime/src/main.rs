@@ -60,20 +60,16 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     let local_addr = listener.local_addr()?;
 
-    let _tunnel: Option<Tunnel>;
-    let endpoint = if args.advertise == "tunnel" {
+    let (endpoint, _tunnel) = if args.advertise == "tunnel" {
         let t = Tunnel::spawn(TunnelOptions {
             local_port: local_addr.port(),
             hostname: args.tunnel_hostname.as_deref(),
             token: args.tunnel_token.as_deref(),
         })
         .await?;
-        let url = t.url.clone();
-        _tunnel = Some(t);
-        url
+        (t.url.clone(), Some(t))
     } else {
-        _tunnel = None;
-        resolve_advertise(&args.advertise, local_addr).await?
+        (resolve_advertise(&args.advertise, local_addr).await?, None)
     };
     tracing::info!(%local_addr, %endpoint, "inbound listener ready");
 

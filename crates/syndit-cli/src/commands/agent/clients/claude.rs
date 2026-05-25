@@ -1,16 +1,14 @@
 use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-use crate::commands::agent::create::Resolved;
-
-pub fn write(resolved: &Resolved) -> Result<()> {
+pub fn write(runtime_args: &[String]) -> Result<()> {
     let mut cmd = Command::new("claude");
     cmd.arg("mcp")
         .arg("add")
         .arg("syndit")
         .arg("agent-runtime")
         .arg("--");
-    for a in &resolved.runtime_args {
+    for a in runtime_args {
         cmd.arg(a);
     }
 

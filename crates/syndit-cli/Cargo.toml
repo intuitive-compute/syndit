@@ -22,3 +22,6 @@ rand_core.workspace = true
 dirs.workspace = true
 dialoguer.workspace = true
 open = "5"
+
+[dev-dependencies]
+tempfile = "3"

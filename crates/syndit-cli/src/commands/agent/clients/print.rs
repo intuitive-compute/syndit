@@ -1,13 +1,11 @@
 use serde_json::json;
 
-use crate::commands::agent::create::Resolved;
-
-pub fn emit(resolved: &Resolved) {
+pub fn emit(runtime_args: &[String]) {
     println!("# Claude Code");
     println!("# Run this command in your shell:");
     println!();
     print!("claude mcp add syndit agent-runtime --");
-    for chunk in resolved.runtime_args.chunks(2) {
+    for chunk in runtime_args.chunks(2) {
         println!(" \\");
         match chunk {
             [k, v] => print!("  {k} {}", shell_quote(v)),
@@ -24,7 +22,7 @@ pub fn emit(resolved: &Resolved) {
     let entry = json!({
         "syndit": {
             "command": "agent-runtime",
-            "args": resolved.runtime_args,
+            "args": runtime_args,
         }
     });
     println!("{}", serde_json::to_string_pretty(&entry).unwrap());

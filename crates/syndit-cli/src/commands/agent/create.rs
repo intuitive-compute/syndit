@@ -1,10 +1,10 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
-use rand_core::RngCore;
 use std::process::{Command, Stdio};
 
 use crate::config;
+use crate::util::random_hex;
 
 const PRO_URL: &str = "https://syndit.sh";
 const DEFAULT_REGISTRY_URL: &str =
@@ -72,41 +72,21 @@ pub struct CursorArgs {
 pub async fn run(client: CreateClient) -> Result<()> {
     match client {
         CreateClient::Claude(args) => {
-            let resolved = resolve(args, /* interactive_confirm = */ true)?;
-            super::clients::claude::write(&resolved)
+            let runtime_args = resolve(args, true)?;
+            super::clients::claude::write(&runtime_args)
         }
         CreateClient::Cursor(args) => {
-            let config_path = args.config_path.clone();
-            let resolved = resolve(args.common, /* interactive_confirm = */ true)?;
-            super::clients::cursor::write(&resolved, config_path)
+            let path = args.config_path;
+            let force = args.common.yes;
+            let runtime_args = resolve(args.common, true)?;
+            super::clients::cursor::write(&runtime_args, path, force)
         }
         CreateClient::Print(args) => {
-            let resolved = resolve(args, /* interactive_confirm = */ false)?;
-            super::clients::print::emit(&resolved);
+            let runtime_args = resolve(args, false)?;
+            super::clients::print::emit(&runtime_args);
             Ok(())
         }
     }
-}
-
-pub struct Resolved {
-    pub agent_id: String,
-    pub user_id: String,
-    pub posture: String,
-    pub registry_url: String,
-    pub bind: String,
-    pub advertise: String,
-    pub tunnel_hostname: Option<String>,
-    pub tunnel_token: Option<String>,
-    pub runtime_args: Vec<String>,
-    /// True if the user passed --yes; writers use this to suppress secondary
-    /// confirmation prompts (e.g. overwriting an existing entry).
-    pub yes: bool,
-}
-
-fn random_hex(len: usize) -> String {
-    let mut buf = vec![0u8; len];
-    rand_core::OsRng.fill_bytes(&mut buf);
-    buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn default_bind(posture: &str) -> &'static str {
@@ -120,11 +100,7 @@ fn default_advertise(posture: &str) -> &'static str {
     match posture {
         "local" => "localhost",
         "lan" => "lan",
-        // posture `private` currently advertises via tunnel.
-        // Invitation-gated reachability (only authorised peers may resolve)
-        // is future work — today it behaves identically to `public`.
-        "private" => "tunnel",
-        "public" => "tunnel",
+        "private" | "public" => "tunnel",
         _ => "localhost",
     }
 }
@@ -157,22 +133,16 @@ fn prompt_posture() -> Result<String> {
     Ok(POSTURES[idx].to_string())
 }
 
-fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Resolved> {
+fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Vec<String>> {
     let user_cfg = config::load()
         .context("no user identity found — run `syndit register` first")?;
 
-    let pro = if args.pro {
-        true
-    } else if args.name.is_some() {
-        false
-    } else {
-        prompt_pro_or_free()?
-    };
-
+    let pro = args.pro || (args.name.is_none() && prompt_pro_or_free()?);
     if pro {
         println!("Opening {PRO_URL} to register a pro agent name...");
         open::that(PRO_URL).context("failed to open browser")?;
-        bail!("pro registration must complete in the browser; re-run with --name <chosen>");
+        println!("Once you've chosen a name, re-run with --name <chosen>.");
+        std::process::exit(0);
     }
 
     let posture = match args.posture {
@@ -196,12 +166,10 @@ fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Resolved> {
         .advertise
         .unwrap_or_else(|| default_advertise(&posture).to_string());
 
-    // Named-tunnel args must come as a pair (mirrors agent-runtime's constraint).
-    match (&args.tunnel_hostname, &args.tunnel_token) {
-        (Some(_), Some(_)) | (None, None) => {}
-        _ => bail!(
+    if args.tunnel_hostname.is_some() != args.tunnel_token.is_some() {
+        bail!(
             "--tunnel-hostname and --tunnel-token must be supplied together for a named Cloudflare tunnel"
-        ),
+        );
     }
 
     if advertise == "tunnel" {
@@ -235,20 +203,16 @@ fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Resolved> {
         ]);
     }
 
-    let resolved = Resolved {
-        agent_id,
-        user_id: user_cfg.user_id,
-        posture,
-        registry_url: args.registry_url,
-        bind,
-        advertise,
-        tunnel_hostname: args.tunnel_hostname,
-        tunnel_token: args.tunnel_token,
-        runtime_args,
-        yes: args.yes,
-    };
-
-    print_summary(&resolved);
+    print_summary(
+        &agent_id,
+        &user_cfg.user_id,
+        &posture,
+        &args.registry_url,
+        &bind,
+        &advertise,
+        args.tunnel_hostname.as_deref(),
+        args.tunnel_token.is_some(),
+    );
 
     if interactive_confirm && !args.yes {
         let proceed = Confirm::with_theme(&ColorfulTheme::default())
@@ -261,22 +225,32 @@ fn resolve(args: CommonArgs, interactive_confirm: bool) -> Result<Resolved> {
         }
     }
 
-    Ok(resolved)
+    Ok(runtime_args)
 }
 
-fn print_summary(r: &Resolved) {
+#[allow(clippy::too_many_arguments)]
+fn print_summary(
+    agent_id: &str,
+    user_id: &str,
+    posture: &str,
+    registry_url: &str,
+    bind: &str,
+    advertise: &str,
+    tunnel_hostname: Option<&str>,
+    has_tunnel_token: bool,
+) {
     println!();
     println!("Agent configuration:");
-    println!("  Agent ID:     {}", r.agent_id);
-    println!("  User ID:      {}", r.user_id);
-    println!("  Posture:      {}", r.posture);
-    println!("  Registry URL: {}", r.registry_url);
-    println!("  Bind:         {}", r.bind);
-    println!("  Advertise:    {}", r.advertise);
-    if let Some(h) = &r.tunnel_hostname {
+    println!("  Agent ID:     {agent_id}");
+    println!("  User ID:      {user_id}");
+    println!("  Posture:      {posture}");
+    println!("  Registry URL: {registry_url}");
+    println!("  Bind:         {bind}");
+    println!("  Advertise:    {advertise}");
+    if let Some(h) = tunnel_hostname {
         println!("  Tunnel host:  {h}");
     }
-    if r.tunnel_token.is_some() {
+    if has_tunnel_token {
         println!("  Tunnel token: <redacted in summary>");
     }
     println!();
@@ -295,6 +269,7 @@ fn preflight_cloudflared() -> Result<()> {
         Ok(s) => bail!(
             "`cloudflared --version` exited with {s}. Reinstall it (e.g. `brew install cloudflared`)."
         ),
+        // MUST stay in sync with agent-runtime/src/tunnel.rs::build_command.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(
             "`cloudflared` not found on PATH. Install it (e.g. `brew install cloudflared`) or see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
         ),
