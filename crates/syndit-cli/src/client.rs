@@ -12,20 +12,13 @@ pub struct AgentRecordDto {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ListResponseDto {
-    pub records: Vec<AgentRecordDto>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct UserRecordDto {
-    pub user_id: String,
-    pub public_key: String,
-    pub created_at: Option<String>,
+struct ListResponseDto {
+    records: Vec<AgentRecordDto>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ErrorResponse {
-    pub error: String,
+struct ErrorResponse {
+    error: String,
 }
 
 pub struct RegistryClient {
@@ -38,71 +31,6 @@ impl RegistryClient {
         Self {
             http: reqwest::Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
-        }
-    }
-
-    pub async fn create_user(&self, dto: &UserRecordDto) -> Result<UserRecordDto> {
-        let url = format!("{}/api/v1/users", self.base_url);
-        let resp = self
-            .http
-            .post(&url)
-            .json(dto)
-            .send()
-            .await
-            .context("failed to reach registry")?;
-
-        if resp.status().is_success() {
-            resp.json().await.context("failed to parse user response")
-        } else {
-            let status = resp.status();
-            let body: ErrorResponse = resp
-                .json()
-                .await
-                .unwrap_or(ErrorResponse { error: status.to_string() });
-            bail!("user registration failed ({}): {}", status, body.error)
-        }
-    }
-
-    pub async fn get_user(&self, user_id: &str) -> Result<UserRecordDto> {
-        let url = format!("{}/api/v1/users/{}", self.base_url, user_id);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .context("failed to reach registry")?;
-
-        if resp.status().is_success() {
-            resp.json().await.context("failed to parse user response")
-        } else {
-            let status = resp.status();
-            let body: ErrorResponse = resp
-                .json()
-                .await
-                .unwrap_or(ErrorResponse { error: status.to_string() });
-            bail!("user lookup failed ({}): {}", status, body.error)
-        }
-    }
-
-    pub async fn register_agent(&self, dto: &AgentRecordDto) -> Result<AgentRecordDto> {
-        let url = format!("{}/api/v1/agents", self.base_url);
-        let resp = self
-            .http
-            .post(&url)
-            .json(dto)
-            .send()
-            .await
-            .context("failed to reach registry")?;
-
-        if resp.status().is_success() {
-            resp.json().await.context("failed to parse register response")
-        } else {
-            let status = resp.status();
-            let body: ErrorResponse = resp
-                .json()
-                .await
-                .unwrap_or(ErrorResponse { error: status.to_string() });
-            bail!("register failed ({}): {}", status, body.error)
         }
     }
 
